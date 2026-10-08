@@ -1,26 +1,19 @@
 # AF-REVIVAL Discord Bot
 
-A clean, simple Discord bot for the AF-REVIVAL project.
+Discord bot for the AF-REVIVAL project using Discord.js, MongoDB, Mongoose, and dotenv. All commands are Discord slash commands.
 
-Built with Node.js and [discord.js](https://discord.js.org/). Configuration lives in a `.env` file that is never committed to Git.
+## Features
 
-## Development Status
+- `/announcement` - Send announcements (admin/staff only)
+- `/update` - Send updates with text/images/files/videos (admin/staff only)
+- `/invite` - Invite quest (3 valid invites unlock redeem button). Redeem gives one-time code from game backend via ephemeral response.
 
-The bot is built in stages. Each stage is tested before the next one starts.
+## Tech Stack
 
-- [x] Phase 1 — `/announcement` (admin/staff only via `ADMIN_ROLE_IDS`)
-- [x] Phase 2 — `!update` (admin/staff only via `ADMIN_ROLE_IDS`)
-- [x] Phase 3 — `/invite` (all members, buttons, invite link)
-- [x] Phase 4 — Invite tracking (`/invites` + `guildMemberAdd`)
-- [x] Phase 5 — Invite quest (3 valid invites unlocks Redeem)
-- [x] Phase 6 — `/redeem` + Redeem button (one-time code, ephemeral)
-- [ ] Phase 7 — Final testing
-
-## Requirements
-
-- Node.js 18 or newer
-- npm
-- A Discord application with a bot (from the [Discord Developer Portal](https://discord.com/developers/applications))
+- Node.js + JavaScript
+- Discord.js v14
+- MongoDB + Mongoose
+- dotenv
 
 ## Installation
 
@@ -30,89 +23,56 @@ cd AF-REVIVAL
 npm install
 ```
 
-## Configuration
+## Environment Variables
 
-Create your local `.env` file from the template:
+Copy `.env.example` to `.env` and fill in values:
 
-- **Windows:** `copy .env.example .env`
-- **macOS / Linux:** `cp .env.example .env`
+| Variable | Description |
+|---|---|
+| `DISCORD_TOKEN` | Bot token from Discord Developer Portal |
+| `DISCORD_CLIENT_ID` | Application ID |
+| `DISCORD_GUILD_ID` | Development server ID |
+| `MONGODB_URI` | MongoDB connection string |
+| `DISCORD_INVITE_URL` | Official invite URL (default provided) |
+| `ANNOUNCEMENT_CHANNEL_ID` | Channel for announcements |
+| `UPDATE_CHANNEL_ID` | Channel for updates |
+| `ADMIN_ROLE_IDS` | Comma-separated role IDs for admins/staff |
+| `GAME_API_BASE_URL` | AF-REVIVAL game backend base URL |
+| `GAME_API_KEY` | API key for game backend |
 
-Then open `.env` and fill in the values:
-
-| Variable | Where to find it |
-| --- | --- |
-| `DISCORD_TOKEN` | Developer Portal → your app → **Bot** → **Reset Token / Copy Token** |
-| `DISCORD_CLIENT_ID` | Developer Portal → your app → **General Information** → **Application ID** |
-| `DISCORD_GUILD_ID` | Discord → your server → right-click the server icon → **Copy Server ID** (enable Developer Mode first in Settings → Advanced) |
-| `DISCORD_INVITE_URL` | Your official server invite link (Server Settings → Invites) |
-| `ANNOUNCEMENT_CHANNEL_ID` | Right-click the announcement channel → **Copy Channel ID** |
-| `UPDATE_CHANNEL_ID` | Right-click the updates channel → **Copy Channel ID** |
-
-> Never share your `.env` file or your bot token. The `.env` file is ignored by Git.
-
-## Registering Slash Commands
-
-Register the commands on your development server (run this once, and again after adding new commands):
+## Register Slash Commands
 
 ```bash
 npm run deploy
 ```
 
-This registers the commands for the server in `DISCORD_GUILD_ID` only. Running it again replaces the same list, so commands are never duplicated.
-
-## Running the Bot
+## Run the Bot
 
 ```bash
 npm start
 ```
 
-Or during development (auto-restarts on file changes):
+Development (watch mode):
 
 ```bash
 npm run dev
 ```
 
-You should see:
+## How It Works
 
-```
-Logged in as YourBotName#1234
-Loaded 1 slash command(s).
-```
+- **Invite tracking**: Uses Discord invites to detect who invited each new member. Prevents duplicate counting. Progress stored in MongoDB.
+- **Quest**: 3 valid invites unlock Redeem button on `/invite` embed.
+- **Redemption**: Clicking Redeem calls `GAME_API_BASE_URL/api/redeem/claim` (configurable to match actual AF-REVIVAL backend). The real one-time code is returned by the game backend and shown only to the user via ephemeral response. Redeem is one-time only.
+- **Permissions**: Admin/staff checked via `ADMIN_ROLE_IDS` (not just Administrator perm).
 
-## Testing /announcement
+## Security
 
-| Test | Action | Expected result |
-| --- | --- | --- |
-| 1 — Authorized user | Use `/announcement title:"Server Maintenance" message:"The server will be offline for maintenance at 10 PM."` as an admin | Embed appears in the announcement channel, and you get: `Announcement successfully sent to #channel.` |
-| 2 — Unauthorized user | Use `/announcement` as a regular member | `You do not have permission to use this command.` |
-| 3 — Missing information | Discord requires `title` and `message`, so the form cannot be sent empty. The bot also double-checks | `Please provide the required announcement information.` |
-| 4 — Restart | Stop the bot (`Ctrl + C`) and run `npm start` again | Bot comes online and `/announcement` still works |
+- No secrets committed. `.env` is ignored.
+- Redeem codes never logged publicly.
+- Ephemeral responses used for sensitive info.
+- No fake code generation; game backend is source of truth.
+- No `/addtoken` command.
 
-Optional options: `footer` (small text at the bottom of the embed) and `attachment` (an image or file).
+## Branch
 
-## Project Structure
-
-```
-AF-REVIVAL/
-│
-├── src/
-│   ├── commands/
-│   │   └── announcement.js      # /announcement slash command
-│   │
-│   ├── events/
-│   │   └── ready.js             # Runs when the bot is online
-│   │
-│   ├── deploy-commands.js       # Registers slash commands on the server
-│   └── index.js                 # Bot entry point
-│
-├── .env.example                 # Template for environment variables
-├── .gitignore                   # Keeps secrets and local files out of Git
-├── package.json
-└── README.md
-```
-
-## Security Notes
-
-- `.env`, `.env.*` (except `.env.example`) and `node_modules/` are gitignored.
-- No token, server ID, channel ID or other secret is hardcoded in the code.
-- Errors are logged on the server console only; Discord users only ever see simple, friendly messages.
+Changes made on `feature/af-revival-changes-updates` branch. Do not push automatically.

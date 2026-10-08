@@ -1,4 +1,4 @@
-// Slash command: /invite - shows Invite Quest embed with buttons
+// Slash command: /invite - shows Invite Quest with buttons
 const {
   SlashCommandBuilder,
   EmbedBuilder,
@@ -8,9 +8,12 @@ const {
   MessageFlags,
   ComponentType,
 } = require('discord.js');
-const db = require('../database/database');
+const User = require('../models/User');
+const Redemption = require('../models/Redemption');
+const { claimGameToken } = require('../utils/gameApi');
 
 const QUEST_GOAL = 3;
+const INVITE_URL = process.env.DISCORD_INVITE_URL || 'https://discord.gg/RZ8C8wnmU';
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -27,53 +30,43 @@ module.exports = {
     }
 
     const userId = interaction.user.id;
-    db.ensureUser(userId);
-    const inviteCount = db.getInviteCount(userId);
-    const hasRedeemed = db.hasRedeemed(userId);
-    const questCompleted = inviteCount >= QUEST_GOAL || hasRedeemed;
-
-    if (questCompleted && !db.hasQuestCompleted(userId)) {
-      db.setQuestCompleted(userId);
+    let user = await User.findOne({ discordUserId: userId });
+    if (!user) {
+      user = await User.create({ discordUserId: userId, inviteCount: 0, questCompleted: false });
     }
 
-    const inviteUrl = process.env.DISCORD_INVITE_URL || '';
+    const inviteCount = user.inviteCount || 0;
+    const hasRedeemed = Boolean(user.hasRedeemed);
+    if (inviteCount >= QUEST_GOAL && !user.questCompleted) {
+      user.questCompleted = true;
+      await user.save();
+    }
 
     function buildEmbed(count) {
       const completed = count >= QUEST_GOAL || hasRedeemed;
       const embed = new EmbedBuilder()
         .setColor(0x5865f2)
-        .setTitle('AF-REVIVAL INVITE QUEST');
+        .setTitle('AF-REVIVAL INVITE QUEST')
+        .setDescription('Invite 3 people to the official AF-REVIVAL Discord server to unlock your game redeem code.');
 
       if (completed) {
-        embed
-          .setDescription(
-            'Invite 3 people to the official AF-REVIVAL Discord server to unlock your game redeem code.',
-          )
-          .addFields({
-            name: 'QUEST COMPLETED',
-            value: 'Congratulations!\nYou can now redeem your AF-REVIVAL game code.',
-          })
-          .addFields({ name: 'Progress', value: `${Math.min(count, QUEST_GOAL)}/${QUEST_GOAL}` });
-      } else {
-        embed
-          .setDescription(
-            'Invite 3 people to the official AF-REVIVAL Discord server to unlock your game redeem code.',
-          )
-          .addFields({ name: 'Progress', value: `${count}/${QUEST_GOAL}` })
-          .addFields({ name: 'Next Step', value: 'Invite more players to complete the quest.' });
-      }
-
-      if (inviteUrl) {
         embed.addFields({
-          name: 'Official Server Invite',
-          value: `[Click here to invite others](${inviteUrl})`,
+          name: 'QUEST COMPLETED',
+          value: 'Congratulations!\nYou can now redeem your AF-REVIVAL game code.',
+        });
+      } else {
+        embed.addFields({
+          name: 'Next Step',
+          value: 'Invite more players to complete the quest.',
         });
       }
 
+      embed.addFields({ name: 'Progress', value: `${Math.min(count, QUEST_GOAL)}/${QUEST_GOAL}` });
+      embed.addFields({ name: 'Official Server Invite', value: `[Click here to invite others](${INVITE_URL})` });
       return embed;
     }
 
-    const canRedeem = (inviteCount >= QUEST_GOAL || questCompleted) && !hasRedeemed;
+    const canRedeem = (inviteCount >= QUEST_GOAL || user.questCompleted) && !hasRedeemed;
 
     const redeemButton = new ButtonBuilder()
       .setCustomId('invite_redeem')
@@ -96,7 +89,7 @@ module.exports = {
 
     const collector = reply.createMessageComponentCollector({
       componentType: ComponentType.Button,
-      time: 300_000, // 5 minutes
+      time: 300_000,
     });
 
     collector.on('collect', async (btnInteraction) => {
@@ -119,10 +112,10 @@ module.exports = {
       }
 
       if (btnInteraction.customId === 'invite_redeem') {
-        // Re-check eligibility
-        const currentCount = db.getInviteCount(userId);
-        const alreadyRedeemed = db.hasRedeemed(userId);
+        let currentUser = await User.findOne({ discordUserId: userId });
+        if (!currentUser) currentUser = await User.create({ discordUserId: userId });
 
+        const alreadyRedeemed = Boolean(currentUser.hasRedeemed);
         if (alreadyRedeemed) {
           await btnInteraction.reply({
             content: 'You have already redeemed your AF-REVIVAL code.',
@@ -131,7 +124,8 @@ module.exports = {
           return;
         }
 
-        if (currentCount < QUEST_GOAL) {
+        const currentCount = currentUser.inviteCount || 0;
+        if (currentCount < QUEST_GOAL && !currentUser.questCompleted) {
           await btnInteraction.reply({
             content: `You have not completed the Invite Quest yet. Progress: ${currentCount}/${QUEST_GOAL}`,
             flags: MessageFlags.Ephemeral,
@@ -139,28 +133,71 @@ module.exports = {
           return;
         }
 
-        // Claim a code
-        const code = db.claimNextCode(userId);
-        if (!code) {
+        // Check for existing redemption record
+        const existingRed = await Redemption.findOne({ discordUserId: userId });
+        if (existingRed) {
           await btnInteraction.reply({
-            content: 'No unused redeem codes are available at this time. Please contact an administrator.',
+            content: 'You have already redeemed your AF-REVIVAL code.',
+            flags: MessageFlags.Ephemeral,
+          });
+          currentUser.hasRedeemed = true;
+          await currentUser.save();
+          return;
+        }
+
+        // Call game API to claim token
+        const apiResult = await claimGameToken(userId);
+        if (!apiResult.success || !apiResult.token) {
+          const errorMsg = apiResult.error || 'The AF-REVIVAL game service is temporarily unavailable. Please try again later.';
+          // Generic user message for API issues
+          if (errorMsg.toLowerCase().includes('no') && errorMsg.toLowerCase().includes('code')) {
+            await btnInteraction.reply({
+              content: 'No AF-REVIVAL redeem codes are currently available. Please wait for more codes to be added.',
+              flags: MessageFlags.Ephemeral,
+            });
+          } else {
+            await btnInteraction.reply({
+              content: 'The AF-REVIVAL game service is temporarily unavailable. Please try again later.',
+              flags: MessageFlags.Ephemeral,
+            });
+          }
+          return;
+        }
+
+        const token = apiResult.token;
+        const tokenId = apiResult.tokenId || token;
+
+        // Save redemption
+        try {
+          await Redemption.create({ discordUserId: userId, gameTokenId: tokenId });
+          currentUser.hasRedeemed = true;
+          currentUser.gameTokenId = tokenId;
+          currentUser.redeemedAt = new Date();
+          currentUser.questCompleted = true;
+          await currentUser.save();
+        } catch (error) {
+          console.error('Failed to save redemption:', error.message);
+          await btnInteraction.reply({
+            content: 'The service is temporarily unavailable. Please try again later.',
             flags: MessageFlags.Ephemeral,
           });
           return;
         }
 
-        const redeemedEmbed = new EmbedBuilder()
+        // Send code privately
+        const embedRedeem = new EmbedBuilder()
           .setColor(0x00ff99)
           .setTitle('AF-REVIVAL Redeem Code')
           .setDescription('Congratulations!\nYou completed the Invite Quest.')
-          .addFields({ name: 'Your one-time redeem code', value: `\`\`\`${code}\`\`\`` });
+          .addFields({ name: 'Your AF-REVIVAL redeem code', value: `\`\`\`${token}\`\`\`` })
+          .setFooter({ text: 'This code is for one-time use. Keep it safe.' });
 
         await btnInteraction.reply({
-          embeds: [redeemedEmbed],
+          embeds: [embedRedeem],
           flags: MessageFlags.Ephemeral,
         });
 
-        // Update original embed to show redeemed state
+        // Disable redeem button
         const finalEmbed = buildEmbed(Math.max(currentCount, QUEST_GOAL));
         const finalRow = new ActionRowBuilder().addComponents(
           cancelButton.setDisabled(false),
@@ -168,16 +205,11 @@ module.exports = {
         );
         await interaction.editReply({ embeds: [finalEmbed], components: [finalRow] }).catch(() => {});
         collector.stop('redeemed');
-        return;
       }
     });
 
-    collector.on('end', async (collected, reason) => {
-      if (reason === 'time' || reason === 'cancelled' || reason === 'redeemed') {
-        // Already handled
-      } else {
-        await interaction.editReply({ components: [] }).catch(() => {});
-      }
+    collector.on('end', async () => {
+      // Collector ended - no further action needed
     });
   },
 };

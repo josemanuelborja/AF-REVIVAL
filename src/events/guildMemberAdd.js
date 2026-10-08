@@ -1,11 +1,10 @@
 // Track invites when a member joins
 const { Events } = require('discord.js');
-const db = require('../database/database');
 const { fetchInvites } = require('../utils/invites');
+const User = require('../models/User');
+const Invite = require('../models/Invite');
 
 const QUEST_GOAL = 3;
-
-// Cache last invites per guild
 const guildInvites = new Map();
 
 module.exports = {
@@ -15,16 +14,13 @@ module.exports = {
     const guild = member.guild;
     if (!guild) return;
 
-    // Store inviter info
     let inviter = null;
     let inviteCode = null;
 
     try {
-      // Get current invites
       const newInvites = await fetchInvites(guild);
       const oldInvites = guildInvites.get(guild.id);
 
-      // Find which invite increased
       if (oldInvites) {
         for (const [code, invite] of newInvites) {
           const oldInvite = oldInvites.get(code);
@@ -35,15 +31,12 @@ module.exports = {
               break;
             }
           } else if (invite.uses > 0) {
-            // New invite
             inviter = invite.inviter;
             inviteCode = code;
             break;
           }
         }
       }
-
-      // Update cache
       guildInvites.set(guild.id, newInvites);
     } catch (error) {
       console.error('Error tracking invites on join:', error.message);
@@ -54,29 +47,31 @@ module.exports = {
       }
     }
 
-    // If we found who invited, record it
     if (inviter && inviter.id !== member.id) {
       const invitedUserId = member.id;
       const inviterId = inviter.id;
 
-      // Prevent duplicate counting of the same member
-      if (!db.hasBeenInvited(invitedUserId)) {
-        const recorded = db.recordInvite(inviterId, invitedUserId, inviteCode);
-        if (recorded) {
-          const oldCount = db.getInviteCount(inviterId);
-          db.incrementInviteCount(inviterId);
-          const newCount = db.getInviteCount(inviterId);
-
-          // Mark quest as completed if reached goal
-          if (newCount >= QUEST_GOAL) {
-            db.setQuestCompleted(inviterId);
-          }
-
-          console.log(`Invite recorded: ${inviter.tag} (${inviterId}) invited ${member.user.tag} (${invitedUserId}). Count: ${oldCount} -> ${newCount}`);
+      const existing = await Invite.findOne({ invitedUserId });
+      if (!existing) {
+        try {
+          await Invite.create({ inviterId, invitedUserId, inviteCode: inviteCode || null });
+        } catch (error) {
+          // Duplicate or other error - skip
+          return;
         }
+
+        let inviterUser = await User.findOne({ discordUserId: inviterId });
+        if (!inviterUser) {
+          inviterUser = await User.create({ discordUserId: inviterId, inviteCount: 0 });
+        }
+        inviterUser.inviteCount = (inviterUser.inviteCount || 0) + 1;
+        if (inviterUser.inviteCount >= QUEST_GOAL) {
+          inviterUser.questCompleted = true;
+        }
+        await inviterUser.save();
+        console.log(`Invite recorded: ${inviterId} invited ${invitedUserId}, count=${inviterUser.inviteCount}`);
       }
     } else {
-      // If we can't determine inviter, still refresh cache
       try {
         guildInvites.set(guild.id, await fetchInvites(guild));
       } catch (error) {

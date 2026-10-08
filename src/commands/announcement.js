@@ -4,7 +4,7 @@ const {
   EmbedBuilder,
   MessageFlags,
 } = require('discord.js');
-const { hasAdminRole } = require('../utils/admin');
+const { hasAdminRole } = require('../utils/permissions');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -39,7 +39,6 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    // Only allow the command inside a server
     if (!interaction.inGuild()) {
       await interaction.reply({
         content: 'This command can only be used in a server.',
@@ -48,7 +47,7 @@ module.exports = {
       return;
     }
 
-    // Check if the user has an authorized admin/staff role
+    // Check if the user has an allowed admin/staff role
     if (!hasAdminRole(interaction.member)) {
       await interaction.reply({
         content: 'You do not have permission to use this command.',
@@ -57,7 +56,6 @@ module.exports = {
       return;
     }
 
-    // Read and validate the announcement information
     const title = interaction.options.getString('title');
     const message = interaction.options.getString('message');
     const footer = interaction.options.getString('footer');
@@ -71,7 +69,6 @@ module.exports = {
       return;
     }
 
-    // Read the announcement channel from the environment
     const channelId = process.env.ANNOUNCEMENT_CHANNEL_ID;
 
     if (!channelId) {
@@ -82,7 +79,6 @@ module.exports = {
       return;
     }
 
-    // Build the announcement embed
     const embed = new EmbedBuilder()
       .setColor(0x5865f2)
       .setTitle(title)
@@ -100,29 +96,22 @@ module.exports = {
     const payload = { embeds: [embed] };
     if (attachment && !isImage) payload.files = [attachment];
 
-    // Send the announcement to the configured channel
     try {
       const channel = await interaction.client.channels.fetch(channelId);
-
       if (!channel || !channel.isTextBased()) {
         throw new Error('Announcement channel is missing or is not a text channel.');
       }
-
       await channel.send(payload);
-
       await interaction.reply({
         content: `Announcement successfully sent to <#${channelId}>.`,
         flags: MessageFlags.Ephemeral,
       });
     } catch (error) {
-      // Log the real error locally, never show it to Discord users
       console.error('Failed to send announcement:', error.message);
-
       const reply = {
         content: 'Something went wrong while sending the announcement. Please try again later.',
         flags: MessageFlags.Ephemeral,
       };
-
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp(reply).catch(() => {});
       } else {
