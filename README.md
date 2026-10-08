@@ -8,12 +8,12 @@ Built with Node.js and [discord.js](https://discord.js.org/). Configuration live
 
 The bot is built in stages. Each stage is tested before the next one starts.
 
-- [x] Phase 1 — `/announcement`
-- [ ] Phase 2 — `!update`
-- [ ] Phase 3 — `/invite`
-- [ ] Phase 4 — Invite tracking (`/invites`)
-- [ ] Phase 5 — Invite quest (3 valid invites)
-- [ ] Phase 6 — `/redeem`
+- [x] Phase 1 — `/announcement` (admin/staff only via `ADMIN_ROLE_IDS`)
+- [x] Phase 2 — `!update` (admin/staff only via `ADMIN_ROLE_IDS`)
+- [x] Phase 3 — `/invite` (all members, buttons, invite link)
+- [x] Phase 4 — Invite tracking (`/invites` + `guildMemberAdd`)
+- [x] Phase 5 — Invite quest (3 valid invites unlocks Redeem)
+- [x] Phase 6 — `/redeem` + Redeem button (one-time code, ephemeral)
 - [ ] Phase 7 — Final testing
 
 ## Requirements
