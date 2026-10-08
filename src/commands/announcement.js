@@ -2,9 +2,9 @@
 const {
   SlashCommandBuilder,
   EmbedBuilder,
-  PermissionFlagsBits,
   MessageFlags,
 } = require('discord.js');
+const { hasAdminRole } = require('../utils/admin');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -48,13 +48,8 @@ module.exports = {
       return;
     }
 
-    // Check permissions (Administrator or Manage Server)
-    const permissions = interaction.memberPermissions;
-    const isAuthorized =
-      permissions.has(PermissionFlagsBits.Administrator) ||
-      permissions.has(PermissionFlagsBits.ManageGuild);
-
-    if (!isAuthorized) {
+    // Check if the user has an authorized admin/staff role
+    if (!hasAdminRole(interaction.member)) {
       await interaction.reply({
         content: 'You do not have permission to use this command.',
         flags: MessageFlags.Ephemeral,

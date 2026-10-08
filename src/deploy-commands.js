@@ -22,7 +22,9 @@ const commandsPath = path.join(__dirname, 'commands');
 for (const file of fs.readdirSync(commandsPath)) {
   if (!file.endsWith('.js')) continue;
   const command = require(path.join(commandsPath, file));
-  commands.push(command.data.toJSON());
+  if (command.data && command.data.toJSON) {
+    commands.push(command.data.toJSON());
+  }
 }
 
 // Register the commands on the configured server (overwrites the same list, so no duplicates)
