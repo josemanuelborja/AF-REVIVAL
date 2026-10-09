@@ -3,7 +3,7 @@ require('dotenv').config();
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { Client, Collection, GatewayIntentBits, Partials, MessageFlags } = require('discord.js');
+const { Client, Collection, GatewayIntentBits, MessageFlags } = require('discord.js');
 const { connectMongo } = require('./database/mongodb');
 
 // Make sure the required environment variables exist before starting
@@ -18,13 +18,7 @@ if (missingVariables.length > 0) {
 
 // Create the Discord client
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildInvites,
-    GatewayIntentBits.GuildMessages,
-  ],
-  partials: [Partials.GuildMember],
+  intents: [GatewayIntentBits.Guilds],
 });
 
 // Load all slash commands from src/commands
@@ -50,24 +44,34 @@ for (const file of fs.readdirSync(eventsPath)) {
   else client.on(event.name, listener);
 }
 
-// Handle slash command interactions
+// Handle interactions
 client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-  const command = client.commands.get(interaction.commandName);
-  if (!command || !command.data) return;
+  if (interaction.isChatInputCommand()) {
+    const command = client.commands.get(interaction.commandName);
+    if (!command || !command.data) return;
 
-  try {
-    await command.execute(interaction);
-  } catch (error) {
-    console.error(`Error running /${interaction.commandName}:`, error.message);
-    const reply = {
-      content: 'Something went wrong while running this command.',
-      flags: MessageFlags.Ephemeral,
-    };
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp(reply).catch(() => {});
-    } else {
-      await interaction.reply(reply).catch(() => {});
+    try {
+      await command.execute(interaction);
+    } catch (error) {
+      console.error(`Error running /${interaction.commandName}:`, error.message);
+      const reply = {
+        content: 'Something went wrong while running this command.',
+        flags: MessageFlags.Ephemeral,
+      };
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp(reply).catch(() => {});
+      } else {
+        await interaction.reply(reply).catch(() => {});
+      }
+    }
+    return;
+  }
+
+  if (interaction.isButton()) {
+    // Handle the whitelist panel button
+    const whitelistCommand = client.commands.get('whitelist');
+    if (whitelistCommand && whitelistCommand.handleButton) {
+      await whitelistCommand.handleButton(interaction);
     }
   }
 });

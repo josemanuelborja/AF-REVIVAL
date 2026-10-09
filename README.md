@@ -6,7 +6,7 @@ Discord bot for the AF-REVIVAL project using Discord.js, MongoDB, Mongoose, and 
 
 - `/announcement` - Send announcements (admin/staff only)
 - `/update` - Send updates with text/images/files/videos (admin/staff only)
-- `/invite` - Invite quest (3 valid invites unlock redeem button). Redeem gives one-time code from game backend via ephemeral response.
+- `/whitelist` - Create the whitelist panel (admin/staff only). Members click the Whitelist button to be approved and receive the installation link through DM.
 
 ## Tech Stack
 
@@ -33,18 +33,34 @@ Copy `.env.example` to `.env` and fill in values:
 | `DISCORD_CLIENT_ID` | Application ID |
 | `DISCORD_GUILD_ID` | Development server ID |
 | `MONGODB_URI` | MongoDB connection string |
-| `DISCORD_INVITE_URL` | Official invite URL (default provided) |
 | `ANNOUNCEMENT_CHANNEL_ID` | Channel for announcements |
 | `UPDATE_CHANNEL_ID` | Channel for updates |
 | `ADMIN_ROLE_IDS` | Comma-separated role IDs for admins/staff |
-| `GAME_API_BASE_URL` | AF-REVIVAL game backend base URL |
-| `GAME_API_KEY` | API key for game backend |
+| `AF_REVIVAL_INSTALL_URL` | AF-REVIVAL installation link sent by DM |
+| `GAME_API_BASE_URL` | AF-REVIVAL game backend base URL (optional) |
+| `GAME_API_KEY` | API key for game backend (optional) |
+
+## MongoDB Setup
+
+1. Create a MongoDB database (local or MongoDB Atlas).
+2. Put the connection string in `MONGODB_URI`.
+3. The bot creates its collections automatically on first use (`users`, `redemptions`, `whitelists`).
+
+## Discord Bot Setup
+
+1. Create an application at the [Discord Developer Portal](https://discord.com/developers/applications).
+2. Create a bot and copy the token into `DISCORD_TOKEN`.
+3. Copy the Application ID into `DISCORD_CLIENT_ID`.
+4. Invite the bot to your server with the `bot` and `applications.commands` scopes.
+5. Copy your server ID into `DISCORD_GUILD_ID` (enable Developer Mode in Discord settings).
 
 ## Register Slash Commands
 
 ```bash
 npm run deploy
 ```
+
+This registers `/announcement`, `/update`, and `/whitelist` on the server in `DISCORD_GUILD_ID`. Run it again after changing any command.
 
 ## Run the Bot
 
@@ -58,21 +74,33 @@ Development (watch mode):
 npm run dev
 ```
 
-## How It Works
+## How the Whitelist System Works
 
-- **Invite tracking**: Uses Discord invites to detect who invited each new member. Prevents duplicate counting. Progress stored in MongoDB.
-- **Quest**: 3 valid invites unlock Redeem button on `/invite` embed.
-- **Redemption**: Clicking Redeem calls `GAME_API_BASE_URL/api/redeem/claim` (configurable to match actual AF-REVIVAL backend). The real one-time code is returned by the game backend and shown only to the user via ephemeral response. Redeem is one-time only.
-- **Permissions**: Admin/staff checked via `ADMIN_ROLE_IDS` (not just Administrator perm).
+1. An admin/staff member runs `/whitelist`.
+2. The bot posts a whitelist panel embed with a **Whitelist** button.
+3. A member clicks the button.
+4. The bot checks MongoDB:
+   - Not whitelisted yet: creates a whitelist record (`discordUserId`, `discordUsername`, `whitelistedAt`), replies with an ephemeral confirmation, and sends the installation link by DM.
+   - Already whitelisted: shows "You are already whitelisted" and does not create a duplicate record.
+5. If the member has DMs disabled, the whitelist record is kept and an ephemeral message asks them to enable DMs.
+
+The installation link is **never posted publicly** - it is only sent through DM after approval.
+
+## Admin/Staff Authorization
+
+Administrative commands (`/announcement`, `/update`, `/whitelist`) require a role listed in `ADMIN_ROLE_IDS` (comma-separated role IDs). Ordinary Discord members cannot use them. This does not rely on the Discord Administrator permission.
+
+## Game API Integration
+
+`src/utils/gameApi.js` is a configurable placeholder for talking to the AF-REVIVAL game backend. The endpoint, authentication, and response format must be adapted to the real backend API. No fake codes are generated - the game backend remains the source of truth for redeem codes. The whitelist flow does not call the game API.
 
 ## Security
 
 - No secrets committed. `.env` is ignored.
-- Redeem codes never logged publicly.
+- The installation link is only delivered by DM after whitelist approval.
 - Ephemeral responses used for sensitive info.
-- No fake code generation; game backend is source of truth.
-- No `/addtoken` command.
+- No `/addtoken` command. No fake code generation.
 
 ## Branch
 
-Changes made on `feature/af-revival-changes-updates` branch. Do not push automatically.
+Changes made on `feature/af-revival-whitelist` branch. Do not push automatically.
