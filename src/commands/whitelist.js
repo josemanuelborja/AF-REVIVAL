@@ -77,8 +77,9 @@ module.exports.handleButton = async (interaction) => {
     .setColor(0x00ff99)
     .setTitle("AF-REVIVAL Whitelist Approved")
     .setDescription("You have been successfully whitelisted for AF-REVIVAL.")
-    .addFields({ name: "Download", value: INSTALL_URL })
-    .setFooter({ text: footerText });
+    .addFields({ name: "Download", value: INSTALL_URL });
+
+  dmEmbed.setFooter({ text: footerText });
 
   try {
     const existing = await Whitelist.findOne({ discordUserId: userId });

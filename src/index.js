@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Client, Collection, GatewayIntentBits, MessageFlags } = require('discord.js');
 const { connectMongo } = require('./database/mongodb');
+const { startWebsite } = require('./website/server');
 
 // Make sure the required environment variables exist before starting
 const requiredVariables = ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_GUILD_ID', 'MONGODB_URI'];
@@ -76,10 +77,11 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// Connect to DB and start bot
+// Connect to DB, start the registration website, and start the bot
 async function start() {
   try {
     await connectMongo();
+    startWebsite();
     await client.login(process.env.DISCORD_TOKEN);
   } catch (error) {
     console.error('Failed to start bot:', error.message);
@@ -88,6 +90,3 @@ async function start() {
 }
 
 start();
-
-// Start the bot
-client.login(process.env.DISCORD_TOKEN);
